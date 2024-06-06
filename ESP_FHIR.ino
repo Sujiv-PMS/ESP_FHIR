@@ -170,20 +170,20 @@ void new_user_c(String* patient_deets, String D_name) {
   get_owner();
   DynamicJsonDocument nuc(5000);
   nuc["resourceType"] = "Patient";
-
-  if (locationflag == 1) {
-    JsonArray extension = nuc.createNestedArray("extension");
-    JsonObject extension_0 = extension.createNestedObject();
-    extension_0["url"] = "http://hl7.org/fhir/StructureDefinition/patient-mothersMaidenName";
-    extension_0["valueString"] = patient_deets[1];
-    JsonObject extension_1 = extension.createNestedObject();
-    extension_1["url"] = "http://hl7.org/fhir/StructureDefinition/patient-location";
-    extension_1["valueReference"]["reference"] = location_id;
-  } else {
+  /* Adding Location ID to Patient NUC Details */ 
+  // if (locationflag == 1) {
+  //   JsonArray extension = nuc.createNestedArray("extension");
+  //   JsonObject extension_0 = extension.createNestedObject();
+  //   extension_0["url"] = "http://hl7.org/fhir/StructureDefinition/patient-mothersMaidenName";
+  //   extension_0["valueString"] = patient_deets[1];
+  //   JsonObject extension_1 = extension.createNestedObject();
+  //   extension_1["url"] = "http://hl7.org/fhir/StructureDefinition/patient-location";
+  //   extension_1["valueReference"]["reference"] = location_id;
+  // } else {
     JsonObject extension_0 = nuc["extension"].createNestedObject();
     extension_0["url"] = "http://hl7.org/fhir/StructureDefinition/patient-mothersMaidenName";
     extension_0["valueString"] = patient_deets[1];
-  }
+  // }
 
   JsonArray identifier = nuc.createNestedArray("identifier");
   identifier[0]["system"] = "urn:ietf:rfc:3986";
@@ -629,12 +629,13 @@ void loop() {
           time_stamp = String(rtc.getTime("%Y-%m-%dT%X+05:30"));
           cic_data(output, split_arr[2], device_resource_id, patient_resource_id, communication_resource_id, observation_resource_id, time_stamp);
           httpCode = http_send(base_url + "/Observation/" + observation_resource_id, httpPUT, output);
-          Serial.printf("Http_CIC_Datalog_Resp - %d\n", httpCode);
+          Serial.printf("Http_CIC_Obs_Resp - %d\n", httpCode);
           output = "";
           time_stamp = String(rtc.getTime("%Y-%m-%dT%X+05:30"));
           int vytemp = cic_alarm(output, split_arr[3], device_resource_id, patient_resource_id, communication_resource_id, observation_resource_id, time_stamp);
           if (vytemp != 1) {
             httpCode = http_send(base_url + "/Communication/" + String(communication_resource_id), httpPUT, output);
+            Serial.printf("Http_CIC_Comm_Resp - %d\n", httpCode);
           }
         } else if (split_arr[1] == "MASIMO") {
           output = "";
@@ -657,9 +658,9 @@ void loop() {
       else if (split_arr[0] == "HCM") {
         if (split_arr[1] == "NUC") {
           split_str(split_arr[2], p_deets, ",");
-          if (p_deets[0] == "PATID001") {        //PATID001
-            p_deets[0] = String(random(10000));  //Random Device ID because Device ID Page not present
-          }
+          // if (p_deets[0] == "PATID001") {        //PATID001
+          //   p_deets[0] = String(random(10000));  //Random Device ID because Device ID Page not present
+          // }
           new_user_c(p_deets, "Heating Cooling Machine");
           new_obs_c(split_arr[0]);
           new_com_c(split_arr[0]);
@@ -674,10 +675,12 @@ void loop() {
             time_stamp = String(rtc.getTime("%Y-%m-%dT%X+05:30"));
             HCM_data(output, split_arr[2], device_resource_id, patient_resource_id, communication_resource_id, observation_resource_id, time_stamp);
             httpCode = http_send(base_url + "/Observation/" + observation_resource_id, httpPUT, output);
+            Serial.printf("Http_HCM_OBS_Resp - %d\n", httpCode);
             output = "";
             time_stamp = String(rtc.getTime("%Y-%m-%dT%X+05:30"));
             HCM_alarm(output, split_arr[3], device_resource_id, patient_resource_id, communication_resource_id, observation_resource_id, time_stamp);
             httpCode = http_send(base_url + "/Communication/" + String(communication_resource_id), httpPUT, output);
+            Serial.printf("Http_HCM_COMM_Resp - %d\n", httpCode);
           }
         }
       }
@@ -751,7 +754,7 @@ void loop() {
           time_stamp = String(rtc.getTime("%Y-%m-%dT%X+05:30"));
           SVAAS_data(output, in_data, device_resource_id, patient_resource_id, communication_resource_id, observation_resource_id, time_stamp);
           httpCode = http_send(base_url + "/Observation/" + String(observation_resource_id), httpPUT, output);
-          Serial.println(httpCode);
+          Serial.printf("Http_SVAAS_Obs_Resp - %d\n", httpCode);
           output = "";
           if (httpCode != 200) {
             return;
@@ -759,7 +762,7 @@ void loop() {
           time_stamp = String(rtc.getTime("%Y-%m-%dT%X+05:30"));
           SVAAS_alarm(output, in_data, device_resource_id, patient_resource_id, communication_resource_id, observation_resource_id, time_stamp);
           httpCode = http_send(base_url + "/Communication/" + String(communication_resource_id), httpPUT, output);
-          Serial.println(httpCode);
+          Serial.printf("Http_SVAAS_Comm_Resp - %d\n", httpCode);
           if (httpCode != 200) {
             return;
           }
