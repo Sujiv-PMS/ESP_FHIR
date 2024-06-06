@@ -154,6 +154,7 @@ void get_owner() {
     Serial.println("NO OWNER_ID IN DEVICE... TRY AGAIN");
   }
   if (n["location"]["reference"]) {
+    locationflag = 1;
     const char* tem = n["location"]["reference"];
     location_id = String(tem);
     Serial.println("!!!!!!!!!!!!!" + location_id);
@@ -170,9 +171,19 @@ void new_user_c(String* patient_deets, String D_name) {
   DynamicJsonDocument nuc(5000);
   nuc["resourceType"] = "Patient";
 
-  JsonObject extension_0 = nuc["extension"].createNestedObject();
-  extension_0["url"] = "http://hl7.org/fhir/StructureDefinition/patient-mothersMaidenName";
-  extension_0["valueString"] = patient_deets[1];
+  if (locationflag == 1) {
+    JsonArray extension = nuc.createNestedArray("extension");
+    JsonObject extension_0 = extension.createNestedObject();
+    extension_0["url"] = "http://hl7.org/fhir/StructureDefinition/patient-mothersMaidenName";
+    extension_0["valueString"] = patient_deets[1];
+    JsonObject extension_1 = extension.createNestedObject();
+    extension_1["url"] = "http://hl7.org/fhir/StructureDefinition/patient-location";
+    extension_1["valueReference"]["reference"] = location_id;
+  } else {
+    JsonObject extension_0 = nuc["extension"].createNestedObject();
+    extension_0["url"] = "http://hl7.org/fhir/StructureDefinition/patient-mothersMaidenName";
+    extension_0["valueString"] = patient_deets[1];
+  }
 
   JsonArray identifier = nuc.createNestedArray("identifier");
   identifier[0]["system"] = "urn:ietf:rfc:3986";
@@ -646,7 +657,7 @@ void loop() {
       else if (split_arr[0] == "HCM") {
         if (split_arr[1] == "NUC") {
           split_str(split_arr[2], p_deets, ",");
-          if (p_deets[0] == "PATID001") { //PATID001
+          if (p_deets[0] == "PATID001") {        //PATID001
             p_deets[0] = String(random(10000));  //Random Device ID because Device ID Page not present
           }
           new_user_c(p_deets, "Heating Cooling Machine");
