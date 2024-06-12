@@ -140,7 +140,7 @@ void SVAAS_alarm(String &return_data, String &in_data, String &d_id, String &p_i
 }
 
 void SVAAS_data(String &return_data, String &in_data, String &d_id, String &p_id, String &c_id, String &o_id, String &time_stamp) {
-  String dlog_arr[40];
+  String dlog_arr[50];
   split_str(in_data, dlog_arr, ",");
   DynamicJsonDocument inc_log(4096);
 
