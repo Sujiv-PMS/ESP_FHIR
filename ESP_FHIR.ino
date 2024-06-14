@@ -599,6 +599,23 @@ void setup() {
   }
 }
 
+const char* intermediaryServiceUrl = "http://192.168.0.126:9997/data";
+
+int sendToIntermediaryService(String dataType, String resourceId, String jsonData) {
+  
+
+    // Structure the JSON payload
+    String payload = "{\"device_id\":\"" + String(device_resource_id) + "\",\"data_type\":\"" + dataType + "\",\"resource_id\":\"" + resourceId + "\",\"data\":" + jsonData + "}";
+
+    // Send HTTP POST request
+    // int httpResponseCode = http.POST(payload);
+    // Serial.println(payload);
+    httpCode = http_send(intermediaryServiceUrl, httpPost, payload);
+
+    return httpCode;
+
+}
+
 void loop() {
   unsigned long startTime;
   if (digitalRead(0) == LOW) {
@@ -628,13 +645,15 @@ void loop() {
           output = "";
           time_stamp = String(rtc.getTime("%Y-%m-%dT%X+05:30"));
           cic_data(output, split_arr[2], device_resource_id, patient_resource_id, communication_resource_id, observation_resource_id, time_stamp);
-          httpCode = http_send(base_url + "/Observation/" + observation_resource_id, httpPUT, output);
+          // httpCode = http_send(base_url + "/Observation/" + observation_resource_id, httpPUT, output);
+          httpCode = sendToIntermediaryService("Observation", observation_resource_id, output);
           Serial.printf("Http_CIC_Obs_Resp - %d\n", httpCode);
           output = "";
           time_stamp = String(rtc.getTime("%Y-%m-%dT%X+05:30"));
           int vytemp = cic_alarm(output, split_arr[3], device_resource_id, patient_resource_id, communication_resource_id, observation_resource_id, time_stamp);
           if (vytemp != 1) {
-            httpCode = http_send(base_url + "/Communication/" + String(communication_resource_id), httpPUT, output);
+            // httpCode = http_send(base_url + "/Communication/" + String(communication_resource_id), httpPUT, output);
+            httpCode = sendToIntermediaryService("Communication", communication_resource_id, output);
             Serial.printf("Http_CIC_Comm_Resp - %d\n", httpCode);
           }
         } else if (split_arr[1] == "MASIMO") {
@@ -643,7 +662,8 @@ void loop() {
           String sanitizedData = split_arr[2];
           sanitizedData = sanitizedData.substring(0, sanitizedData.length() - 1);
           String jsonData = "{\"device_id\":\"" + String(device_resource_id) + "\",\"patient_id\":\"" + String(patient_resource_id) + "\",\"timestamp\":\"" + time_stamp + "\",\"data\":[" + sanitizedData + "]}";
-          httpCode = http_send(graph_url, httpPost, jsonData);
+          // httpCode = http_send(graph_url, httpPost, jsonData);
+          httpCode = sendToIntermediaryService("Masimo", patient_resource_id, jsonData);
           Serial.printf("Http_CIC_MAS_Resp - %d\n", httpCode);
           if (httpCode == 200) {
             digitalWrite(2, HIGH);
