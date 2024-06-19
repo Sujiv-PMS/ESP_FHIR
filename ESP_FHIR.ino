@@ -18,11 +18,16 @@ WebServer server(80);
 #include "SVAAS_Datalog.h"
 #include "HCM_Datalog.h"
 
+#include <PubSubClient.h>
+
 ESP32Time rtc;
 HTTPClient http;
 HTTPClient https;
-WiFiClientSecure client;
+// WiFiClientSecure client;
 File root;
+
+WiFiClient espClient;
+PubSubClient client(espClient);
 
 #define DebugPort Serial
 // #ifndef DebugPort
@@ -49,6 +54,11 @@ String p_deets[10];
 //String base_url = "http://pmsind.co.in:9444/fhir-server/api/v4";
 String base_url = "https://192.168.0.126/fhir";
 String graph_url = "http://192.168.0.126:9043/data";
+
+const char* mqtt_server = "192.168.0.126";  //new
+// const char* mqtt_server = "broker.hivemq.com";  //new
+
+
 int httpCode;
 int ownerflag = 1;
 int locationflag = 1;
@@ -65,6 +75,29 @@ int patientid;
 #define httpPost 2
 #define httpGET 3
 #define httpPUT 4
+
+
+void reconnect() {
+  // Loop until we're reconnected
+  while (!client.connected()) {
+    Serial.print("Attempting MQTT connection...");
+    // Create a unique client ID
+    String clientId = "ESP32Client-" + String(random(0xffff), HEX);
+    // Attempt to connect
+    if (client.connect(clientId.c_str())) {
+      Serial.println("connected");
+      // Once connected, publish an announcement...
+      client.publish("observation", "Hello from ESP32");
+    } else {
+      Serial.print("failed, rc=");
+      Serial.print(client.state());
+      Serial.println(" try again in 5 seconds");
+      // Wait 5 seconds before retrying
+      delay(5000);
+    }
+  }
+}
+
 
 
 int http_send(String url, uint8_t method, String& data) {
@@ -170,7 +203,7 @@ void new_user_c(String* patient_deets, String D_name) {
   get_owner();
   DynamicJsonDocument nuc(5000);
   nuc["resourceType"] = "Patient";
-  /* Adding Location ID to Patient NUC Details */ 
+  /* Adding Location ID to Patient NUC Details */
   // if (locationflag == 1) {
   //   JsonArray extension = nuc.createNestedArray("extension");
   //   JsonObject extension_0 = extension.createNestedObject();
@@ -180,9 +213,9 @@ void new_user_c(String* patient_deets, String D_name) {
   //   extension_1["url"] = "http://hl7.org/fhir/StructureDefinition/patient-location";
   //   extension_1["valueReference"]["reference"] = location_id;
   // } else {
-    JsonObject extension_0 = nuc["extension"].createNestedObject();
-    extension_0["url"] = "http://hl7.org/fhir/StructureDefinition/patient-mothersMaidenName";
-    extension_0["valueString"] = patient_deets[1];
+  JsonObject extension_0 = nuc["extension"].createNestedObject();
+  extension_0["url"] = "http://hl7.org/fhir/StructureDefinition/patient-mothersMaidenName";
+  extension_0["valueString"] = patient_deets[1];
   // }
 
   JsonArray identifier = nuc.createNestedArray("identifier");
@@ -489,6 +522,7 @@ void WiFiStationDisconnected(WiFiEvent_t event, WiFiEventInfo_t info) {
 void setup() {
   Serial.begin(115200);
   Serial.setTimeout(250);
+  client.setBufferSize(8092);
   // #ifndef DebugPort
   //   DebugPort.begin(15200, SERIAL_8N1, 16, 17);
   // #endif
@@ -531,6 +565,8 @@ void setup() {
   }
   WiFi.onEvent(WiFiGotIP, WiFiEvent_t::ARDUINO_EVENT_WIFI_STA_GOT_IP);
   WiFi.onEvent(WiFiStationDisconnected, WiFiEvent_t::ARDUINO_EVENT_WIFI_STA_DISCONNECTED);
+
+  client.setServer(mqtt_server, 1883);
 
   bool t_flag = true;
   while (t_flag) {
@@ -601,30 +637,70 @@ void setup() {
 
 const char* intermediaryServiceUrl = "http://192.168.0.126:9997/data";
 
+int a = 230;
+
 int sendToIntermediaryService(String dataType, String resourceId, String jsonData) {
+
   
+  // Structure the JSON payload
+  String payload = "{\"device_id\":\"" + String(device_resource_id) + "\",\"data_type\":\"" + dataType + "\",\"resource_id\":\"" + resourceId + "\",\"data\":" + jsonData + "}";
+  // String message = "{\"key\":\"" + String(device_resource_id) + "\", \"value\":\"" + payload + "}";
+  // String payload = "{\"device_id\":\"" + String(device_resource_id) + "\",\"data_type\":\"" + dataType + "\",\"resource_id\":\"" + resourceId + "\",\"data\":" + jsonData + "}";
+  // String message = "{\"key\":\"" + String(device_resource_id) + "\", \"value\":\"" + payload + "\"}";
+  // DynamicJsonDocument data(4096); // Adjust the size as needed
+  // deserializeJson(data, jsonData);
 
-    // Structure the JSON payload
-    String payload = "{\"device_id\":\"" + String(device_resource_id) + "\",\"data_type\":\"" + dataType + "\",\"resource_id\":\"" + resourceId + "\",\"data\":" + jsonData + "}";
+  // // Create the root JSON object
+  // DynamicJsonDocument doc(4096); // Adjust the size as needed
+  // doc["device_id"] = device_resource_id;
+  // doc["data_type"] = dataType;
+  // doc["resource_id"] = resourceId;
+  // doc["data"] = data;
 
-    // Send HTTP POST request
-    // int httpResponseCode = http.POST(payload);
-    // Serial.println(payload);
-    httpCode = http_send(intermediaryServiceUrl, httpPost, payload);
+  // // Convert the root JSON object to a string
+  // String payload;
+  // serializeJson(doc, payload);
 
-    return httpCode;
+  // Create the final message
+  // DynamicJsonDocument messageDoc(4096); // Adjust the size as needed
+  // messageDoc["key"] = device_resource_id;
+  // messageDoc["value"] = payload;
 
+  // String message;
+  // serializeJson(messageDoc, message);
+  // Send HTTP POST request
+  // int httpResponseCode = http.POST(payload);
+  // Serial.println(payload);
+  // httpCode = http_send(intermediaryServiceUrl, httpPost, payload);
+  // message = message.substring(0,a);
+  // a=a+1;
+  // Serial.println(message);
+  Serial.println(payload.length());
+  // client.publish("observation", message.c_str());
+  // client.publish("communication", "Communication Data");
+  // Serial.println(dataType);
+  //
+  dataType.toLowerCase();
+  client.publish(dataType.c_str(), payload.c_str());
+
+  return 200;  //httpCode;
 }
 
 void loop() {
   unsigned long startTime;
-  if (digitalRead(0) == LOW) {
-    Serial.println("Wiping WiFi credentials from memory...");
-    wipeEEPROM();
-    digitalWrite(2, HIGH);
-    while (loadWIFICredsForm());
-    digitalWrite(2, LOW);
+  // if (digitalRead(0) == LOW) {
+  //   Serial.println("Wiping WiFi credentials from memory...");
+  //   wipeEEPROM();
+  //   digitalWrite(2, HIGH);
+  //   while (loadWIFICredsForm())
+  //     ;
+  //   digitalWrite(2, LOW);
+  // }
+  if (!client.connected()) {
+    reconnect();
   }
+  client.loop();
+
   if (Serial.available() > 0) {
     String in_data = Serial.readString();
     DebugPort.println(in_data);
@@ -663,7 +739,7 @@ void loop() {
           sanitizedData = sanitizedData.substring(0, sanitizedData.length() - 1);
           String jsonData = "{\"device_id\":\"" + String(device_resource_id) + "\",\"patient_id\":\"" + String(patient_resource_id) + "\",\"timestamp\":\"" + time_stamp + "\",\"data\":[" + sanitizedData + "]}";
           // httpCode = http_send(graph_url, httpPost, jsonData);
-          httpCode = sendToIntermediaryService("Masimo", patient_resource_id, jsonData);
+          httpCode = sendToIntermediaryService("Pleth", patient_resource_id, jsonData);
           Serial.printf("Http_CIC_MAS_Resp - %d\n", httpCode);
           if (httpCode == 200) {
             digitalWrite(2, HIGH);
@@ -756,73 +832,72 @@ void loop() {
     //SVAAS DEV
     if (split_arr[0] == "SVAAS") {
       if (split_arr[1] == "DATALOG") {
-          output = "";
-          time_stamp = String(rtc.getTime("%Y-%m-%dT%X+05:30"));
-          String splat_array[60];
-          int split_count = split_str(split_arr[2], splat_array, ",");
-          Serial.print("split_count: ");
-          Serial.println(split_count);
-          if (split_count == 45) {
-        String m_name = splat_array[44];
-        if (mother_name != m_name && m_name != "000") {
-          writeFile(SPIFFS, "/config.json", "{\"device\":\"" + String(device_resource_id) + "\",\"patient\":\"" + " " + "\",\"communication\":\"" + " " + "\",\"observation\":\"" + " " + "\",\"mother_name\":\"" + " " + "\"}");
-          patient_resource_id = " ";
-          observation_resource_id = " ";
-          communication_resource_id = " ";
-          mother_name = m_name;
-          SVAAS_new_user_c(mother_name, "PMS-SVAAS");
-          new_obs_c("SVAAS");
-          new_com_c("SVAAS");
-          writeFile(SPIFFS, "/config.json", "{\"device\":\"" + String(device_resource_id) + "\",\"patient\":\"" + String(patient_resource_id) + "\",\"communication\":\"" + String(communication_resource_id) + "\",\"observation\":\"" + String(observation_resource_id) + "\",\"mother_name\":\"" + String(mother_name) + "\"}");
-        }
-        else {
-          output = "";
-          time_stamp = String(rtc.getTime("%Y-%m-%dT%X+05:30"));
-          SVAAS_data(output, split_arr[2], device_resource_id, patient_resource_id, communication_resource_id, observation_resource_id, time_stamp);
-          httpCode = http_send(base_url + "/Observation/" + String(observation_resource_id), httpPUT, output);
-          Serial.printf("Http_SVAAS_Obs_Resp - %d\n", httpCode);
-          output = "";
-          if (httpCode != 200) {
-            return;
+        output = "";
+        time_stamp = String(rtc.getTime("%Y-%m-%dT%X+05:30"));
+        String splat_array[60];
+        int split_count = split_str(split_arr[2], splat_array, ",");
+        Serial.print("split_count: ");
+        Serial.println(split_count);
+        if (split_count == 45) {
+          String m_name = splat_array[44];
+          if (mother_name != m_name && m_name != "000") {
+            writeFile(SPIFFS, "/config.json", "{\"device\":\"" + String(device_resource_id) + "\",\"patient\":\"" + " " + "\",\"communication\":\"" + " " + "\",\"observation\":\"" + " " + "\",\"mother_name\":\"" + " " + "\"}");
+            patient_resource_id = " ";
+            observation_resource_id = " ";
+            communication_resource_id = " ";
+            mother_name = m_name;
+            SVAAS_new_user_c(mother_name, "PMS-SVAAS");
+            new_obs_c("SVAAS");
+            new_com_c("SVAAS");
+            writeFile(SPIFFS, "/config.json", "{\"device\":\"" + String(device_resource_id) + "\",\"patient\":\"" + String(patient_resource_id) + "\",\"communication\":\"" + String(communication_resource_id) + "\",\"observation\":\"" + String(observation_resource_id) + "\",\"mother_name\":\"" + String(mother_name) + "\"}");
+          } else {
+            output = "";
+            time_stamp = String(rtc.getTime("%Y-%m-%dT%X+05:30"));
+            SVAAS_data(output, split_arr[2], device_resource_id, patient_resource_id, communication_resource_id, observation_resource_id, time_stamp);
+            httpCode = http_send(base_url + "/Observation/" + String(observation_resource_id), httpPUT, output);
+            Serial.printf("Http_SVAAS_Obs_Resp - %d\n", httpCode);
+            output = "";
+            if (httpCode != 200) {
+              return;
+            }
+            time_stamp = String(rtc.getTime("%Y-%m-%dT%X+05:30"));
+            SVAAS_alarm(output, split_arr[2], device_resource_id, patient_resource_id, communication_resource_id, observation_resource_id, time_stamp);
+            httpCode = http_send(base_url + "/Communication/" + String(communication_resource_id), httpPUT, output);
+            Serial.printf("Http_SVAAS_Comm_Resp - %d\n", httpCode);
+            if (httpCode != 200) {
+              return;
+            }
           }
-          time_stamp = String(rtc.getTime("%Y-%m-%dT%X+05:30"));
-          SVAAS_alarm(output, split_arr[2], device_resource_id, patient_resource_id, communication_resource_id, observation_resource_id, time_stamp);
-          httpCode = http_send(base_url + "/Communication/" + String(communication_resource_id), httpPUT, output);
-          Serial.printf("Http_SVAAS_Comm_Resp - %d\n", httpCode);
-          if (httpCode != 200) {
-            return;
-          }
         }
-      }
-          // cic_data(output, split_arr[2], device_resource_id, patient_resource_id, communication_resource_id, observation_resource_id, time_stamp);
-          // httpCode = http_send(base_url + "/Observation/" + observation_resource_id, httpPUT, output);
-          // Serial.printf("Http_CIC_Obs_Resp - %d\n", httpCode);
-          // output = "";
-          // time_stamp = String(rtc.getTime("%Y-%m-%dT%X+05:30"));
-          // int vytemp = cic_alarm(output, split_arr[3], device_resource_id, patient_resource_id, communication_resource_id, observation_resource_id, time_stamp);
-          // if (vytemp != 1) {
-          //   httpCode = http_send(base_url + "/Communication/" + String(communication_resource_id), httpPUT, output);
-          //   Serial.printf("Http_CIC_Comm_Resp - %d\n", httpCode);
-          // }
+        // cic_data(output, split_arr[2], device_resource_id, patient_resource_id, communication_resource_id, observation_resource_id, time_stamp);
+        // httpCode = http_send(base_url + "/Observation/" + observation_resource_id, httpPUT, output);
+        // Serial.printf("Http_CIC_Obs_Resp - %d\n", httpCode);
+        // output = "";
+        // time_stamp = String(rtc.getTime("%Y-%m-%dT%X+05:30"));
+        // int vytemp = cic_alarm(output, split_arr[3], device_resource_id, patient_resource_id, communication_resource_id, observation_resource_id, time_stamp);
+        // if (vytemp != 1) {
+        //   httpCode = http_send(base_url + "/Communication/" + String(communication_resource_id), httpPUT, output);
+        //   Serial.printf("Http_CIC_Comm_Resp - %d\n", httpCode);
+        // }
       } else if (split_arr[1] == "MASIMO") {
-          output = "";
-          time_stamp = String(rtc.getTime("%Y-%m-%dT%X+05:30"));
-          String sanitizedData = split_arr[2];
-          sanitizedData = sanitizedData.substring(0, sanitizedData.length() - 1);
-          String jsonData = "{\"device_id\":\"" + String(device_resource_id) + "\",\"patient_id\":\"" + String(patient_resource_id) + "\",\"timestamp\":\"" + time_stamp + "\",\"data\":[" + sanitizedData + "]}";
-          httpCode = http_send(graph_url, httpPost, jsonData);
-          Serial.printf("Http_SVAAS_MAS_Resp - %d\n", httpCode);
-          if (httpCode == 200) {
-            digitalWrite(2, HIGH);
-          }
-          jsonData.clear();
-          sanitizedData.clear();
-        } else {
-          Serial.println("INVALID PACKET RECEIVED");
+        output = "";
+        time_stamp = String(rtc.getTime("%Y-%m-%dT%X+05:30"));
+        String sanitizedData = split_arr[2];
+        sanitizedData = sanitizedData.substring(0, sanitizedData.length() - 1);
+        String jsonData = "{\"device_id\":\"" + String(device_resource_id) + "\",\"patient_id\":\"" + String(patient_resource_id) + "\",\"timestamp\":\"" + time_stamp + "\",\"data\":[" + sanitizedData + "]}";
+        httpCode = http_send(graph_url, httpPost, jsonData);
+        Serial.printf("Http_SVAAS_MAS_Resp - %d\n", httpCode);
+        if (httpCode == 200) {
+          digitalWrite(2, HIGH);
         }
+        jsonData.clear();
+        sanitizedData.clear();
+      } else {
+        Serial.println("INVALID PACKET RECEIVED");
       }
+    }
 
-/*    // SVAAS
+    /*    // SVAAS
     else if (cont <= 1) {
       int connt = split_str(in_data, split_arr, ",");
       Serial.println(connt);
@@ -858,7 +933,8 @@ void loop() {
         }
       }
     }
-*/     else {
+*/
+    else {
       packet_loss++;
       DebugPort.println("WRONG DATA PACKET:");
       DebugPort.println(packet_loss);
