@@ -5,7 +5,6 @@
 #include "HTML.h"
 #include <WebServer.h>
 WebServer server(80);
-#include "Additions.h"
 #include <WiFi.h>
 #include <WiFiClient.h>
 #include <WiFiClientSecure.h>
@@ -13,10 +12,12 @@ WebServer server(80);
 #include "time.h"
 #include <ESP32Time.h>
 #include <base64.h>
+#include "Additions.h"
 #include "CIC_Datalog.h"
 #include "INC_Datalog.h"
 #include "SVAAS_Datalog.h"
 #include "HCM_Datalog.h"
+
 
 #include <PubSubClient.h>
 
@@ -87,7 +88,7 @@ void reconnect() {
     if (client.connect(clientId.c_str())) {
       Serial.println("connected");
       // Once connected, publish an announcement...
-      client.publish("observation", "Hello from ESP32");
+      client.publish("test", "Hello from ESP32");
     } else {
       Serial.print("failed, rc=");
       Serial.print(client.state());
@@ -105,7 +106,7 @@ int http_send(String url, uint8_t method, String& data) {
   switch (method) {
     case httpPOST:
       {
-        http.begin(url);
+        // http.begin(url);
         http.addHeader("Authorization", String("Basic " + base64::encode(fhir_creds)));
         http.addHeader("Content-Type", "application/json");
         http.addHeader("Accept", "*/*");
@@ -113,7 +114,7 @@ int http_send(String url, uint8_t method, String& data) {
         http.addHeader("Connection", "keep-alive");
         http.addHeader("Content-Length", String(data.length()));
         return_code = http.POST(data);
-        http.end();
+        // http.end();
         break;
       }
 
@@ -139,7 +140,7 @@ int http_send(String url, uint8_t method, String& data) {
       break;
 
     case httpPUT:
-      http.begin(url);
+      // http.begin(url);
       unsigned long start = millis();
       http.addHeader("Authorization", String("Basic " + base64::encode(fhir_creds)));
       http.addHeader("Content-Type", "application/json");
@@ -152,7 +153,7 @@ int http_send(String url, uint8_t method, String& data) {
       e_start = e_start - start;
       Serial.print("DL:");
       Serial.println(e_start);
-      http.end();
+      // http.end();
       break;
 
       // default: Serial.println("Invalid method");
@@ -521,7 +522,7 @@ void WiFiStationDisconnected(WiFiEvent_t event, WiFiEventInfo_t info) {
 
 void setup() {
   Serial.begin(115200);
-  Serial.setTimeout(250);
+  Serial.setTimeout(10);
   client.setBufferSize(8092);
   // #ifndef DebugPort
   //   DebugPort.begin(15200, SERIAL_8N1, 16, 17);
@@ -644,6 +645,7 @@ int sendToIntermediaryService(String dataType, String resourceId, String jsonDat
   
   // Structure the JSON payload
   String payload = "{\"device_id\":\"" + String(device_resource_id) + "\",\"data_type\":\"" + dataType + "\",\"resource_id\":\"" + resourceId + "\",\"data\":" + jsonData + "}";
+  // String payload = "Pleth data";
   // String message = "{\"key\":\"" + String(device_resource_id) + "\", \"value\":\"" + payload + "}";
   // String payload = "{\"device_id\":\"" + String(device_resource_id) + "\",\"data_type\":\"" + dataType + "\",\"resource_id\":\"" + resourceId + "\",\"data\":" + jsonData + "}";
   // String message = "{\"key\":\"" + String(device_resource_id) + "\", \"value\":\"" + payload + "\"}";
@@ -681,9 +683,23 @@ int sendToIntermediaryService(String dataType, String resourceId, String jsonDat
   // Serial.println(dataType);
   //
   dataType.toLowerCase();
-  client.publish(dataType.c_str(), payload.c_str());
+  unsigned long start = millis();
+  // Serial.println(dataType);
+  // Serial.println(payload);
+  int mqttflag = 0; 
+  if (client.publish(dataType.c_str(), payload.c_str()) == 1)
+  {
+    mqttflag = 200;
+  }
+  else {
+    mqttflag =0;
+  }
+  unsigned long e_start = millis();
+  e_start = e_start - start;
+  Serial.print("Response:");
+  Serial.println(e_start);
 
-  return 200;  //httpCode;
+  return mqttflag;  //httpCode;
 }
 
 void loop() {
@@ -700,7 +716,7 @@ void loop() {
     reconnect();
   }
   client.loop();
-
+  http.begin(base_url + "/Observation/" + observation_resource_id);
   if (Serial.available() > 0) {
     String in_data = Serial.readString();
     DebugPort.println(in_data);
@@ -721,6 +737,7 @@ void loop() {
           output = "";
           time_stamp = String(rtc.getTime("%Y-%m-%dT%X+05:30"));
           cic_data(output, split_arr[2], device_resource_id, patient_resource_id, communication_resource_id, observation_resource_id, time_stamp);
+
           // httpCode = http_send(base_url + "/Observation/" + observation_resource_id, httpPUT, output);
           httpCode = sendToIntermediaryService("Observation", observation_resource_id, output);
           Serial.printf("Http_CIC_Obs_Resp - %d\n", httpCode);
@@ -799,7 +816,8 @@ void loop() {
           time_stamp = String(rtc.getTime("%Y-%m-%dT%X+05:30"));
 
           inc_data(output, split_arr[2], device_resource_id, patient_resource_id, communication_resource_id, observation_resource_id, time_stamp);
-          httpCode = http_send(base_url + "/Observation/" + String(observation_resource_id), httpPUT, output);
+          // httpCode = http_send(base_url + "/Observation/" + String(observation_resource_id), httpPUT, output);
+          httpCode = sendToIntermediaryService("Observation", observation_resource_id, output);
           Serial.printf("Http_INC_Ob_Resp - %d\n", httpCode);
           if (httpCode == 200) {
             digitalWrite(2, HIGH);
@@ -808,7 +826,8 @@ void loop() {
           time_stamp = String(rtc.getTime("%Y-%m-%dT%X+05:30"));
           int vvtemp = inc_alarm(output, split_arr[3], device_resource_id, patient_resource_id, communication_resource_id, observation_resource_id, time_stamp);
           if (vvtemp != 1) {
-            httpCode = http_send(base_url + "/Communication/" + String(communication_resource_id), httpPUT, output);
+            // httpCode = http_send(base_url + "/Communication/" + String(communication_resource_id), httpPUT, output);
+            httpCode = sendToIntermediaryService("Communication", communication_resource_id, output);
             Serial.printf("Http_INC_Cm_Resp - %d\n", httpCode);
           }
         } else if (split_arr[1] == "MASIMO") {
@@ -817,7 +836,8 @@ void loop() {
           String sanitizedData = split_arr[2];
           sanitizedData = sanitizedData.substring(0, sanitizedData.length() - 1);  //To remove the end comma and /n
           String jsonData = "{\"device_id\":\"" + String(device_resource_id) + "\",\"patient_id\":\"" + String(patient_resource_id) + "\",\"timestamp\":\"" + time_stamp + "\",\"data\":[" + sanitizedData + "]}";
-          httpCode = http_send(graph_url, httpPost, jsonData);
+          // httpCode = http_send(graph_url, httpPost, jsonData);
+          httpCode = sendToIntermediaryService("Pleth", patient_resource_id, jsonData);
           Serial.printf("Http_INC_MAS_Resp - %d\n", httpCode);
           if (httpCode == 200) {
             digitalWrite(2, HIGH);
